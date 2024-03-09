@@ -1,0 +1,130 @@
+name: RAX3000M-123
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'SSH connection to Actions'
+        required: false
+        default: 'false'
+
+
+  ### 环境变量设置
+
+env:
+  REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x           #编译固件源码链接（请勿修改）
+  REPO_BRANCH: openwrt-21.02                                        #源码链接的分支（请勿修改）
+  FEEDS_CONF: feeds.conf.default               
+  CONFIG_FILE: RAX3000M-123.config                                  #配置文件（可SSH远程定制固件插件，也可在本地提取配置粘贴到此文件）
+  DIY_P1_SH: diy-part1.sh                                           #自定义执行文件
+  DIY_P2_SH: diy-part2.sh                                           #自定义执行文件
+  TZ: Asia/Shanghai                                                 #时区 亚洲/上海
+  UPLOAD_OUTPUT: true
+### 结束
+ 
+jobs:
+   _rax3000m:
+    runs-on: ubuntu-20.04
+    permissions:
+      contents: write
+
+    steps:
+    - name: 配置
+      uses: actions/checkout@master
+      
+    - name: 检查服务器配置
+      if: (!cancelled())
+      run: |
+        echo "警告⚠"
+        echo "若分配的服务器性能不足，务必及时取消，重新运行！"
+        echo "已知编译成功CPU型号：8370C,8171M"
+        echo "已知性能不足CPU型号：8272CL,E5系列"
+        echo "--------------------------CPU信息--------------------------"
+        echo "CPU物理数量:$(cat /proc/cpuinfo| grep "physical id"| sort| uniq| wc -l)"
+        echo -e "CPU核心及版本信息：$(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c) \n"
+        echo "--------------------------内存信息--------------------------"
+        echo "已安装内存详细信息："
+        sudo lshw -short -C memory | grep GiB
+        echo -e "\n"
+        echo "--------------------------硬盘信息--------------------------"
+        echo -e  "硬盘数量：$(ls /dev/sd* | grep -v [1-9] | wc -l) \n"
+        echo "硬盘详情："
+        df -Th
+    
+    - name: 配置环境
+      env:
+          DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install $(curl -fsSL git.io/depends-ubuntu-2004)
+        sudo -E apt-get -qq autoremove --purge
+        sudo -E apt-get -qq clean
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+
+    - name: 克隆源码
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+        
+    - name: 加载源  Load custom feeds
+      run: |
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $DIY_P1_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P1_SH
+
+    - name: 更新源  Update feeds
+      run: cd openwrt && ./scripts/feeds update -a
+
+    - name: 安装源  Install feeds
+      run: cd openwrt && ./scripts/feeds install -a
+
+    - name: 加载diy.config设置  Load custom configuration
+      run: |
+        [ -e files ] && mv files openwrt/files
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        chmod +x $DIY_P2_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P2_SH
+
+    - name: 下载依赖
+      run: |
+        cd openwrt
+        make defconfig
+        make download -j8
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: 编译固件
+      run: |
+        cd openwrt
+        make -j$(nproc)
+        echo "FILE_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+    - name : 上传输出文件
+      uses: actions/upload-artifact@master
+      if: env.UPLOAD_OUTPUT == 'true' && !cancelled()
+      with:
+        name: ${{ env.DEVICE }}--${{ env.FILE_DATE }}
+        path: openwrt/bin
+        
+    - name: 整理输出文件
+      run: |
+        cd openwrt/bin/targets/*/*
+        rm -rf packages
+    
+    - name: 发布固件至 Release
+      uses: ncipollo/release-action@v1
+      with:
+        tag: "${{ env.DEVICE }}--${{ env.FILE_DATE }}"
+        artifacts: "openwrt/bin/targets/*/*/*"
+        body: |
+          # 未测试×
+          
+          IP: 192.168.1.1 | Password: none
