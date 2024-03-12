@@ -101,8 +101,8 @@ jobs:
     - name: 删除有问题的文件
       run: |
         cd openwrt/package/feeds/kenzo/
-        rm -r homeproxy/
-        rm -r luci-app-homeproxy/
+        rm -rf homeproxy
+        rm -rf luci-app-homeproxy
 
     - name: Compile the firmware
       id: compile
