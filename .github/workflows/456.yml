@@ -98,6 +98,12 @@ jobs:
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
+    - name: 删除有问题的文件
+      run: |
+        cd openwrt/package/feeds/kenzo/
+        rm -r homeproxy/
+        rm -r luci-app-homeproxy/
+
     - name: Compile the firmware
       id: compile
       run: |
