@@ -25,15 +25,15 @@ env:
   REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x
   REPO_BRANCH: openwrt-21.02
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: 333.config
+  CONFIG_FILE: 111.config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   TZ: Asia/Shanghai
-  DEVICE: 333
+  DEVICE: _rax3000m_256m
   UPLOAD_OUTPUT: true
 
 jobs:
-   333:
+   _rax3000m_256m:
     runs-on: ubuntu-20.04
     permissions:
       contents: write
